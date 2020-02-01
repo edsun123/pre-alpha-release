@@ -361,7 +361,6 @@ always_comb
     calc_stage_isd.pc             = reservation_n.pc;
     calc_stage_isd.instr          = reservation_n.instr;
     calc_stage_isd.v              = reservation_n.v;
-    calc_stage_isd.queue_v        = reservation_n.decode.queue_v;
     calc_stage_isd.instr_v        = reservation_n.decode.instr_v;
     calc_stage_isd.pipe_int_v     = reservation_n.decode.pipe_int_v;
     calc_stage_isd.pipe_mul_v     = reservation_n.decode.pipe_mul_v;
@@ -374,7 +373,7 @@ always_comb
     calc_stage_isd.frf_w_v        = reservation_n.decode.frf_w_v;
 
     // Calculator status EX1 information
-    calc_status.ex1_v                    = reservation_r.decode.queue_v & ~exc_stage_r[0].poison_v;
+    calc_status.ex1_v                    = reservation_r.v & ~exc_stage_r[0].poison_v;
     calc_status.ex1_npc                  = br_tgt_int1;
     calc_status.ex1_br_or_jmp            = reservation_r.decode.br_v | reservation_r.decode.jmp_v;
     calc_status.ex1_instr_v              = reservation_r.decode.instr_v & ~exc_stage_r[0].poison_v;
@@ -382,7 +381,7 @@ always_comb
     // Dependency information for pipelines
     for (integer i = 0; i < pipe_stage_els_lp; i++) 
       begin : dep_status
-        calc_status.dep_status[i].v         = calc_stage_r[i].queue_v;
+        calc_status.dep_status[i].v         = calc_stage_r[i].v;
         calc_status.dep_status[i].int_iwb_v = calc_stage_r[i].pipe_int_v 
                                               & ~exc_stage_n[i+1].poison_v
                                               & calc_stage_r[i].irf_w_v;
@@ -417,7 +416,7 @@ always_comb
 always_comb 
   begin
     // Exception aggregation
-    for (integer i = 0; i < pipe_stage_els_lp; i++) 
+    for (integer i = 0; i <= pipe_stage_els_lp; i++) 
       begin : exc_stage
         // Normally, shift down in the pipe
         exc_stage_n[i] = (i == 0) ? '0 : exc_stage_r[i-1];
@@ -440,7 +439,7 @@ always_comb
   end
 
 assign commit_pkt.v          = calc_stage_r[2].v & ~exc_stage_r[2].poison_v;
-assign commit_pkt.queue_v    = calc_stage_r[2].v & calc_stage_r[2].queue_v & ~exc_stage_r[2].roll_v;
+assign commit_pkt.dequeue    = calc_stage_r[2].v & ~exc_stage_r[2].roll_v;
 assign commit_pkt.instret    = calc_stage_r[2].v & calc_stage_r[2].instr_v & ~exc_stage_n[3].poison_v;
 assign commit_pkt.cache_miss = calc_stage_r[2].v & pipe_mem_miss_v_lo & ~exc_stage_r[2].poison_v;
 assign commit_pkt.tlb_miss   = 1'b0; // TODO: Add to mem resp

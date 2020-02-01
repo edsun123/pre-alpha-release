@@ -73,7 +73,6 @@ module bp_be_checker_top
 
    , input                            tlb_fence_i
    , input                            fencei_i
-   , input                            accept_irq_i
    , input                            debug_mode_i
    , input                            single_step_i
    
@@ -159,13 +158,12 @@ bp_be_scheduler
    ,.cfg_bus_i(cfg_bus_i)
    ,.cfg_irf_data_o(cfg_irf_data_o)
 
-   ,.accept_irq_i(accept_irq_i)
    ,.isd_status_o(isd_status)
    ,.expected_npc_i(expected_npc_lo)
    ,.poison_iss_i(flush_o)
    ,.dispatch_v_i(chk_dispatch_v_o)
    ,.cache_miss_v_i(commit_pkt.cache_miss | commit_pkt.tlb_miss)
-   ,.cmt_v_i(commit_pkt.queue_v)
+   ,.cmt_v_i(commit_pkt.dequeue)
    ,.debug_mode_i(debug_mode_i)
 
    ,.fe_queue_roll_o(fe_queue_roll_o)

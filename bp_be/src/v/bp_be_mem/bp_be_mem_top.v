@@ -91,7 +91,6 @@ module bp_be_mem_top
    , input                                   timer_irq_i
    , input                                   software_irq_i
    , input                                   external_irq_i
-   , output                                  accept_irq_o
    , output                                  single_step_o
    , output                                  debug_mode_o
 
@@ -242,6 +241,7 @@ bp_be_csr
 
    ,.hartid_i(cfg_bus.core_id)
    ,.instret_i(commit_pkt.instret)
+   ,.bubble_i(~commit_pkt.v)
 
    ,.exception_v_i(exception_v_li)
    ,.exception_pc_i(exception_pc_li)
@@ -253,7 +253,6 @@ bp_be_csr
    ,.timer_irq_i(timer_irq_i)
    ,.software_irq_i(software_irq_i)
    ,.external_irq_i(external_irq_i)
-   ,.accept_irq_o(accept_irq_o)
    ,.debug_mode_o(debug_mode_o)
    ,.single_step_o(single_step_o)
 

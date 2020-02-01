@@ -32,6 +32,7 @@ module bp_be_csr
     // Misc interface
     , input [core_id_width_p-1:0]       hartid_i
     , input                             instret_i
+    , input                             bubble_i
 
     , input                             exception_v_i
     , input [vaddr_width_p-1:0]         exception_pc_i
@@ -43,7 +44,6 @@ module bp_be_csr
     , input                             timer_irq_i
     , input                             software_irq_i
     , input                             external_irq_i
-    , output                            accept_irq_o
     , output                            single_step_o
 
     , output [trap_pkt_width_lp-1:0]    trap_pkt_o
@@ -153,16 +153,16 @@ wire is_u_mode = (priv_mode_r == `PRIV_MODE_U);
 `declare_csr(dcsr)
 `declare_csr(dpc)
 
-wire mgie = (mstatus_r.mie & is_m_mode) | is_s_mode | is_u_mode;
-wire sgie = (mstatus_r.sie & is_s_mode) | is_u_mode;
+wire mgie = (mstatus_lo.mie & is_m_mode) | is_s_mode | is_u_mode;
+wire sgie = (mstatus_lo.sie & is_s_mode) | is_u_mode;
 
-wire mti_v = mie_r.mtie & mip_r.mtip;
-wire msi_v = mie_r.msie & mip_r.msip;
-wire mei_v = mie_r.meie & mip_r.meip;
+wire mti_v = mie_lo.mtie & mip_lo.mtip;
+wire msi_v = mie_lo.msie & mip_lo.msip;
+wire mei_v = mie_lo.meie & mip_lo.meip;
 
-wire sti_v = mie_r.stie & mip_r.stip;
-wire ssi_v = mie_r.ssie & mip_r.ssip;
-wire sei_v = mie_r.seie & mip_r.seip;
+wire sti_v = mie_lo.stie & mip_lo.stip;
+wire ssi_v = mie_lo.ssie & mip_lo.ssip;
+wire sei_v = mie_lo.seie & mip_lo.seip;
 
 // TODO: interrupt priority is non-compliant with the spec.
 wire [15:0] interrupt_icode_dec_li =
@@ -361,7 +361,43 @@ always_comb
     instr_misaligned_o    = '0;
     ebreak_o              = '0;
 
-    if (csr_cmd_v_i)
+    // TODO: Need to force a bubble every N-cycles with pending interrupt
+    //   Otherwise a halt loop with a pending interrupt will hang without interrupting
+    if (~is_debug_mode & bubble_i & m_interrupt_icode_v_li)
+      begin
+        priv_mode_n          = `PRIV_MODE_M;
+
+        mstatus_li.mpp       = priv_mode_r;
+        mstatus_li.mpie      = mstatus_lo.mie;
+        mstatus_li.mie       = 1'b0;
+
+        mepc_li              = paddr_width_p'($signed(exception_pc_i));
+        mtval_li             = '0;
+        mcause_li._interrupt = 1'b1;
+        mcause_li.ecode      = m_interrupt_icode_li;
+
+        exception_v_o        = 1'b0;
+        interrupt_v_o        = 1'b1;
+        ret_v_o              = 1'b0;
+      end
+    else if (~is_debug_mode & bubble_i & s_interrupt_icode_v_li)
+      begin
+        priv_mode_n          = `PRIV_MODE_S;
+
+        mstatus_li.spp       = priv_mode_r;
+        mstatus_li.spie      = mstatus_lo.sie;
+        mstatus_li.sie       = 1'b0;
+
+        sepc_li              = paddr_width_p'($signed(exception_pc_i));
+        stval_li             = '0;
+        scause_li._interrupt = 1'b1;
+        scause_li.ecode      = s_interrupt_icode_li;
+
+        exception_v_o        = 1'b0;
+        interrupt_v_o        = 1'b1;
+        ret_v_o              = 1'b0;
+      end
+    else if (csr_cmd_v_i)
       if (~is_debug_mode & (csr_cmd.csr_op == e_ebreak))
         begin
           ebreak_o = (is_m_mode & ~dcsr_lo.ebreakm) 
@@ -375,19 +411,6 @@ always_comb
               dcsr_li.cause  = 1; // Ebreak
               dcsr_li.prv    = priv_mode_r;
             end
-        end
-      else if (~is_debug_mode & (csr_cmd.csr_op == e_op_enter_debug))
-        begin
-          debug_mode_n  = 1'b1;
-          dpc_li        = paddr_width_p'($signed(exception_pc_i));
-          dcsr_li.cause = 3; // Requested halt
-          dcsr_li.prv   = priv_mode_r;
-        end
-      else if (is_debug_mode & (csr_cmd.csr_op == e_op_exit_debug))
-        begin
-          debug_mode_n  = 1'b0;
-          priv_mode_n   = dcsr_lo.prv;
-          ret_v_o       = 1'b1;
         end
       else if (csr_cmd.csr_op == e_sfence_vma)
         begin
@@ -410,21 +433,19 @@ always_comb
           ret_v_o          = ~illegal_instr_o;
         end
       else if (csr_cmd.csr_op == e_mret)
-        begin
-          if (priv_mode_r < `PRIV_MODE_M)
-            illegal_instr_o = 1'b1;
-          else
-            begin
-              priv_mode_n      = mstatus_lo.mpp;
+        if (priv_mode_r < `PRIV_MODE_M)
+          illegal_instr_o = 1'b1;
+        else
+          begin
+            priv_mode_n      = mstatus_lo.mpp;
 
-              mstatus_li.mpp   = `PRIV_MODE_U;
-              mstatus_li.mpie  = 1'b1;
-              mstatus_li.mie   = mstatus_lo.mpie;
-              mstatus_li.mprv  = (priv_mode_n < `PRIV_MODE_M) ? '0 : mstatus_li.mprv;
+            mstatus_li.mpp   = `PRIV_MODE_U;
+            mstatus_li.mpie  = 1'b1;
+            mstatus_li.mie   = mstatus_lo.mpie;
+            mstatus_li.mprv  = (priv_mode_n < `PRIV_MODE_M) ? '0 : mstatus_li.mprv;
 
-              ret_v_o          = 1'b1;
-            end
-        end
+            ret_v_o          = 1'b1;
+          end
       else if (csr_cmd.csr_op == e_sret)
         begin
           if ((is_s_mode & mstatus_lo.tsr) || (priv_mode_r < `PRIV_MODE_S))
@@ -457,49 +478,12 @@ always_comb
         begin
           instr_misaligned_o = 1'b1;
         end
-      else if (csr_cmd.csr_op == e_op_take_interrupt)
-        begin
-          if (~is_debug_mode & m_interrupt_icode_v_li)
-            begin
-              priv_mode_n          = `PRIV_MODE_M;
-
-              mstatus_li.mpp       = priv_mode_r;
-              mstatus_li.mpie      = mstatus_lo.mie;
-              mstatus_li.mie       = 1'b0;
-
-              mepc_li              = paddr_width_p'($signed(exception_pc_i));
-              mtval_li             = '0;
-              mcause_li._interrupt = 1'b1;
-              mcause_li.ecode      = m_interrupt_icode_li;
-
-              exception_v_o        = 1'b0;
-              interrupt_v_o        = 1'b1;
-              ret_v_o              = 1'b0;
-            end
-          else if (~is_debug_mode & s_interrupt_icode_v_li)
-            begin
-              priv_mode_n          = `PRIV_MODE_S;
-
-              mstatus_li.spp       = priv_mode_r;
-              mstatus_li.spie      = mstatus_lo.sie;
-              mstatus_li.sie       = 1'b0;
-
-              sepc_li              = paddr_width_p'($signed(exception_pc_i));
-              stval_li             = '0;
-              scause_li._interrupt = 1'b1;
-              scause_li.ecode      = s_interrupt_icode_li;
-
-              exception_v_o        = 1'b0;
-              interrupt_v_o        = 1'b1;
-              ret_v_o              = 1'b0;
-            end
-        end
       else if (csr_cmd.csr_op == e_wfi)
         begin
           illegal_instr_o = mstatus_lo.tw;
         end
       else if (csr_cmd.csr_op inside {e_ebreak, e_ecall})
-      begin
+        begin
           // ECALL is implemented as part of the exception cause vector
           // EBreak is implemented below
         end
@@ -620,8 +604,8 @@ always_comb
               `CSR_ADDR_MCYCLE: mcycle_li = csr_data_li;
               `CSR_ADDR_MINSTRET: minstret_li = csr_data_li;
               `CSR_ADDR_MCOUNTINHIBIT: mcountinhibit_li = csr_data_li;
-              `CSR_ADDR_DCSR: dcsr_li = csr_data_li;
               `CSR_ADDR_DPC: dpc_li = csr_data_li;
+              `CSR_ADDR_DCSR: dcsr_li = csr_data_li;
               default: illegal_instr_o = 1'b1;
             endcase
         end
@@ -681,11 +665,8 @@ always_comb
         end
   end
 
-// Debug Mode masks all interrupts
-assign accept_irq_o = ~is_debug_mode & (m_interrupt_icode_v_li | s_interrupt_icode_v_li);
-
 // CSR slow paths
-assign satp_ppn_o       = satp_r.ppn;
+assign satp_ppn_o    = satp_lo.ppn;
 
 assign mstatus_sum_o = mstatus_lo.sum;
 assign mstatus_mxr_o = mstatus_lo.mxr;
@@ -707,8 +688,8 @@ assign trap_pkt_cast_o.epc              = (csr_cmd.csr_op == e_sret)
 assign trap_pkt_cast_o.tvec             = (priv_mode_n == `PRIV_MODE_S) ? stvec_r : mtvec_r;
 assign trap_pkt_cast_o.priv_n           = priv_mode_n;
 assign trap_pkt_cast_o.translation_en_n = translation_en_n;
-// TODO: Find more solid invariant
 assign trap_pkt_cast_o.exception        = exception_v_o;
+// fixme: debug mode should mask interrupts
 assign trap_pkt_cast_o._interrupt       = interrupt_v_o;
 assign trap_pkt_cast_o.eret             = ret_v_o;
 

@@ -129,7 +129,6 @@ always_comb
     mem_in_pipe_v      = dep_status_li[0].mem_v | dep_status_li[1].mem_v | dep_status_li[2].mem_v;
     fence_haz_v        = (isd_status_cast_i.isd_fence_v & (~credits_empty_i | mem_in_pipe_v))
                          | (isd_status_cast_i.isd_mem_v & credits_full_i);
-    interrupt_haz_v    = isd_status_cast_i.isd_irq_v & instr_in_pipe_v;
     debug_haz_v        = (~isd_status_cast_i.isd_debug_v & debug_mode_i)
                          | (isd_status_cast_i.isd_debug_v & instr_in_pipe_v);
     queue_haz_v        = ~fe_cmd_ready_i;
@@ -140,7 +139,7 @@ always_comb
                          | dep_status_li[2].serial_v
                          | dep_status_li[3].serial_v;
 
-    control_haz_v = fence_haz_v | interrupt_haz_v | step_haz_v | serial_haz_v | debug_haz_v;
+    control_haz_v = fence_haz_v | step_haz_v | serial_haz_v | debug_haz_v;
 
     // Combine all data hazard information
     // TODO: Parameterize away floating point data hazards without hardware support
