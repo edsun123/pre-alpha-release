@@ -241,7 +241,7 @@ bp_be_csr
 
    ,.hartid_i(cfg_bus.core_id)
    ,.instret_i(commit_pkt.instret)
-   ,.bubble_i(~commit_pkt.v)
+   ,.bubble_i(~commit_pkt.v & ~exception_v_li)
 
    ,.exception_v_i(exception_v_li)
    ,.exception_pc_i(exception_pc_li)
