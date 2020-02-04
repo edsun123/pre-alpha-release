@@ -221,6 +221,9 @@ assign exception_ecode_dec_li =
     ,default: '0
     };
 
+wire interrupt_v_li = ~commit_pkt.cache_miss & ~mmu_cmd_ready_o;
+wire [vaddr_width_p-1:0] interrupt_pc_li = commit_pkt.npc;
+
 bp_be_csr
  #(.bp_params_p(bp_params_p))
   csr
@@ -241,7 +244,9 @@ bp_be_csr
 
    ,.hartid_i(cfg_bus.core_id)
    ,.instret_i(commit_pkt.instret)
-   ,.bubble_i(~commit_pkt.v & ~exception_v_li)
+
+   ,.interrupt_v_i(interrupt_v_li)
+   ,.interrupt_pc_i(interrupt_pc_li)
 
    ,.exception_v_i(exception_v_li)
    ,.exception_pc_i(exception_pc_li)
