@@ -221,9 +221,8 @@ assign exception_ecode_dec_li =
     ,default: '0
     };
 
-wire interrupt_v_li = ~commit_pkt.cache_miss & ~mmu_cmd_ready_o;
-wire [vaddr_width_p-1:0] interrupt_pc_li = commit_pkt.npc;
-
+// Take interrupt during a valid, non-atomic commit
+wire interrupt_v_li = commit_pkt.v & ~commit_pkt.atomic;
 bp_be_csr
  #(.bp_params_p(bp_params_p))
   csr
@@ -246,8 +245,6 @@ bp_be_csr
    ,.instret_i(commit_pkt.instret)
 
    ,.interrupt_v_i(interrupt_v_li)
-   ,.interrupt_pc_i(interrupt_pc_li)
-
    ,.exception_v_i(exception_v_li)
    ,.exception_pc_i(exception_pc_li)
    ,.exception_npc_i(exception_npc_li)

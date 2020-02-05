@@ -34,8 +34,6 @@ module bp_be_csr
     , input                             instret_i
 
     , input                             interrupt_v_i
-    , input [vaddr_width_p-1:0]         interrupt_pc_i
-
     , input                             exception_v_i
     , input [vaddr_width_p-1:0]         exception_pc_i
     , input [vaddr_width_p-1:0]         exception_npc_i
@@ -575,7 +573,41 @@ always_comb
             endcase
         end
 
-    if (~is_debug_mode & exception_v_i & exception_ecode_v_li)
+    if (~is_debug_mode & interrupt_v_i & m_interrupt_icode_v_li)
+      begin
+        priv_mode_n          = `PRIV_MODE_M;
+
+        mstatus_li.mpp       = priv_mode_r;
+        mstatus_li.mpie      = mstatus_lo.mie;
+        mstatus_li.mie       = 1'b0;
+
+        mepc_li              = paddr_width_p'($signed(exception_pc_i));
+        mtval_li             = '0;
+        mcause_li._interrupt = 1'b1;
+        mcause_li.ecode      = m_interrupt_icode_li;
+
+        exception_v_o        = 1'b0;
+        interrupt_v_o        = 1'b1;
+        ret_v_o              = 1'b0;
+      end
+    else if (~is_debug_mode & interrupt_v_i & s_interrupt_icode_v_li)
+      begin
+        priv_mode_n          = `PRIV_MODE_S;
+
+        mstatus_li.spp       = priv_mode_r;
+        mstatus_li.spie      = mstatus_lo.sie;
+        mstatus_li.sie       = 1'b0;
+
+        sepc_li              = paddr_width_p'($signed(exception_pc_i));
+        stval_li             = '0;
+        scause_li._interrupt = 1'b1;
+        scause_li.ecode      = s_interrupt_icode_li;
+
+        exception_v_o        = 1'b0;
+        interrupt_v_o        = 1'b1;
+        ret_v_o              = 1'b0;
+      end
+    else if (~is_debug_mode & exception_v_i & exception_ecode_v_li)
       if (medeleg_lo[exception_ecode_li] & ~is_m_mode)
         begin
           priv_mode_n          = `PRIV_MODE_S;
@@ -616,48 +648,6 @@ always_comb
           interrupt_v_o        = 1'b0;
           ret_v_o              = 1'b0;
         end
-    // Take interrupt if not in debug mode, not doing a csr cmd and not currently taking an exception
-    // The rationale here is that the sequence is technically
-    //   1) commit in MEM3
-    //   2) interrupt EX2 (disrupt completion)
-    //   3) take trap with epc in ex2
-    // The problem is that the privilege mode change in mem3 may affect whether we take the
-    // interrupt in MEM2. Then we could get into an illegal ordering where we change privilege in
-    // PC X, but interrupt PC Y when it should be uninterruptible
-    else if (~is_debug_mode & interrupt_v_i & m_interrupt_icode_v_li & ~csr_cmd_v_i)
-      begin
-        priv_mode_n          = `PRIV_MODE_M;
-
-        mstatus_li.mpp       = priv_mode_r;
-        mstatus_li.mpie      = mstatus_lo.mie;
-        mstatus_li.mie       = 1'b0;
-
-        mepc_li              = paddr_width_p'($signed(interrupt_pc_i));
-        mtval_li             = '0;
-        mcause_li._interrupt = 1'b1;
-        mcause_li.ecode      = m_interrupt_icode_li;
-
-        exception_v_o        = 1'b0;
-        interrupt_v_o        = 1'b1;
-        ret_v_o              = 1'b0;
-      end
-    else if (~is_debug_mode & interrupt_v_i & s_interrupt_icode_v_li & ~csr_cmd_v_i)
-      begin
-        priv_mode_n          = `PRIV_MODE_S;
-
-        mstatus_li.spp       = priv_mode_r;
-        mstatus_li.spie      = mstatus_lo.sie;
-        mstatus_li.sie       = 1'b0;
-
-        sepc_li              = paddr_width_p'($signed(interrupt_pc_i));
-        stval_li             = '0;
-        scause_li._interrupt = 1'b1;
-        scause_li.ecode      = s_interrupt_icode_li;
-
-        exception_v_o        = 1'b0;
-        interrupt_v_o        = 1'b1;
-        ret_v_o              = 1'b0;
-      end
 
     if (~is_debug_mode & exception_v_i & dcsr_lo.step)
       begin

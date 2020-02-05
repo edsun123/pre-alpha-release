@@ -405,8 +405,8 @@ always_comb
     // Slicing the completion pipe for Forwarding information
     for (integer i = 1; i < pipe_stage_els_lp; i++) 
       begin : comp_stage_slice
-        comp_stage_n_slice_iwb_v[i]   = calc_stage_r[i-1].irf_w_v & ~exc_stage_n[i].poison_v; 
-        comp_stage_n_slice_fwb_v[i]   = calc_stage_r[i-1].frf_w_v & ~exc_stage_n[i].poison_v; 
+        comp_stage_n_slice_iwb_v[i]   = calc_stage_r[i-1].irf_w_v & ~exc_stage_r[i-1].poison_v;
+        comp_stage_n_slice_fwb_v[i]   = calc_stage_r[i-1].frf_w_v & ~exc_stage_r[i-1].poison_v;
         comp_stage_n_slice_rd_addr[i] = calc_stage_r[i-1].instr.fields.rtype.rd_addr;
 
         comp_stage_n_slice_rd[i]      = comp_stage_n[i];
@@ -435,11 +435,12 @@ always_comb
         exc_stage_n[0].poison_v        = reservation_n.poison    | flush_i;
         exc_stage_n[1].poison_v        = exc_stage_r[0].poison_v | flush_i;
         exc_stage_n[2].poison_v        = exc_stage_r[1].poison_v | flush_i;
-        exc_stage_n[3].poison_v        = exc_stage_r[2].poison_v | pipe_mem_miss_v_lo | pipe_mem_exc_v_lo;
+        exc_stage_n[3].poison_v        = exc_stage_r[2].poison_v | flush_i;
   end
 
 assign commit_pkt.v          = calc_stage_r[2].v & ~exc_stage_r[2].poison_v;
-assign commit_pkt.dequeue    = calc_stage_r[2].v & ~exc_stage_r[2].roll_v;
+assign commit_pkt.atomic     = calc_stage_r[2].v & (calc_stage_r[2].mem_v | calc_stage_r[2].serial_v);
+assign commit_pkt.dequeue    = calc_stage_r[2].v & ~pipe_mem_miss_v_lo & ~exc_stage_r[2].roll_v;
 assign commit_pkt.instret    = calc_stage_r[2].v & calc_stage_r[2].instr_v & ~exc_stage_n[3].poison_v;
 assign commit_pkt.cache_miss = calc_stage_r[2].v & pipe_mem_miss_v_lo & ~exc_stage_r[2].poison_v;
 assign commit_pkt.tlb_miss   = 1'b0; // TODO: Add to mem resp

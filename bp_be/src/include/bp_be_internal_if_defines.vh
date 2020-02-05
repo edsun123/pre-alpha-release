@@ -109,6 +109,7 @@
   typedef struct packed                                                                            \
   {                                                                                                \
     logic                        v;                                                                \
+    logic                        atomic;                                                           \
     logic                        dequeue;                                                          \
     logic                        instret;                                                          \
     logic                        cache_miss;                                                       \
@@ -180,7 +181,7 @@
    )                                                                                               
 
 `define bp_be_commit_pkt_width(vaddr_width_mp) \
-  (5                                                                                               \
+  (6                                                                                               \
    + 2 * vaddr_width_mp                                                                            \
    + instr_width_p                                                                                 \
    )
