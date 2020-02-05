@@ -405,7 +405,7 @@ always_comb
         interrupt_v_o        = 1'b1;
         ret_v_o              = 1'b0;
       end
-    else if (csr_cmd_v_i)
+    else if (csr_cmd_v_i | cfg_bus_cast_i.csr_r_v | cfg_bus_cast_i.csr_w_v)
       if (~is_debug_mode & (csr_cmd.csr_op == e_ebreak))
         begin
           ebreak_o = (is_m_mode & ~dcsr_lo.ebreakm) 
@@ -510,8 +510,7 @@ always_comb
         illegal_instr_o = 1'b1;
       else
         begin
-          // Read case, we need to read as well as write for config bus
-          if (csr_cmd_v_i | cfg_bus_cast_i.csr_r_v | cfg_bus_cast_i.csr_w_v) 
+            // Read case
             unique casez (csr_cmd.csr_addr)
               `CSR_ADDR_CYCLE  : csr_data_lo = mcycle_lo;
               // Time must be done by trapping, since we can't stall at this point
@@ -567,7 +566,7 @@ always_comb
               `CSR_ADDR_DPC: csr_data_lo = dpc_lo;
               default: illegal_instr_o = 1'b1;
             endcase
-          if (csr_cmd_v_i | cfg_bus_cast_i.csr_w_v) // Write case
+            // Write case
             unique casez (csr_cmd.csr_addr)
               `CSR_ADDR_CYCLE  : mcycle_li = csr_data_li;
               // Time must be done by trapping, since we can't stall at this point
